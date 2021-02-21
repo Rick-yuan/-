@@ -1,0 +1,66 @@
+import threading
+import socket
+import tkinter as tk
+
+window = tk.Tk()  # 创建窗口
+window.geometry("300x150")  # 窗口大小
+window.title('服务器')  # 窗口名字
+hostname = socket.gethostname()
+ip = socket.gethostbyname(hostname)
+
+
+def start_sever():
+    host = hostname  # 本地服务器
+    port = 55555
+    sever = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sever.bind((host, port))
+    sever.listen()
+    clients = []
+    nicknames = []
+
+    def broadcast(message):
+        for client in clients:
+            client.send(message)
+
+    def handle(client):
+        while True:
+            try:
+                message = client.recv(1024)
+                broadcast(message)
+            except:
+                index = client.index(client)
+                clients.remove(client)
+                client.close()
+                nickname = nicknames[index]
+                broadcast(f'{nickname} left the chat'.encode('utf-8'))
+                nicknames.remove(nickname)
+                break
+
+    def receive():
+        while True:
+            client, address = sever.accept()
+            print(f'connected with {str(address)}')
+            client.send('NICK'.encode('utf-8'))
+
+            nickname = client.recv(1024).decode('utf-8')
+            nicknames.append(nickname)
+            clients.append(client)
+
+            print(f'nickname of the client is {nickname} !')
+            broadcast(f'{nickname} joined the chat!'.encode('utf-8'))
+            client.send('connected to the sever'.encode('utf-8'))
+
+            thread = threading.Thread(target=handle, args=(client,))
+            thread.start()
+
+    print('sever is listening...')
+    receive()
+
+
+button = tk.Button(window, text="启动服务器", command=start_sever)
+button.place(relx=0.4, rely=0.4, relwidth=0.25, relheight=0.2)
+history_msg = tk.Text(window, font=('Arial', 12), relief='sunken', state='normal')
+history_msg.place(relx=0.2, rely=0.7, relwidth=0.8, relheight=0.2)
+history_msg.insert("end", ip)
+print(hostname)
+window.mainloop()
