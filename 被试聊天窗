@@ -1,0 +1,177 @@
+import socket
+import threading
+import time
+import tkinter as tk
+from PIL import Image, ImageTk
+from xlutils.copy import copy
+import xlrd
+import os
+import xlwt
+# 主试界面
+
+hostname = socket.gethostname()
+window = tk.Tk()  # 创建窗口
+window.geometry("400x200+550+250")  # 窗口大小
+window.title('聊天室____powered by Y')  # 窗口名字
+li = tk.Label(window, text='输入ip地址并点击获取')
+li.pack()
+e2 = tk.Entry(window, show=None, font=('Arial', 14))
+e2.pack()
+
+
+def get_path():
+    path = e2.get()
+    return path
+
+
+b = tk.Button(window, text='获取ip地址', font=('Arial', 12), width=10, height=1, command=get_path)
+b.pack()
+
+
+def release(event):
+    window.state('icon')
+    top = tk.Toplevel()  # 创建窗口
+    top.geometry("800x450")  # 窗口大小
+    top.title('聊天室B____powered by Y')  # 窗口名字
+    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    ip = get_path()
+    client.connect((ip, 55555))  # 链接服务器
+    nickname = "B"  # 打开网端，链接到服务器，给此客户端命名为你“你”
+    msg_in_box = tk.Entry(top, show=None, font=('Arial', 12), relief='sunken')
+    msg_in_box.place(relx=0, rely=0.8, relwidth=0.5, relheight=0.2)
+    history_msg = tk.Text(top, font=('Arial', 12), relief='sunken', state='normal')
+    history_msg.place(relx=0.52, rely=0.05, relwidth=0.45, relheight=0.8)
+    icon_png = Image.open('icon.png')
+    icon = ImageTk.PhotoImage(icon_png)
+    label = tk.Label(top, image=icon)
+    label.place(relx=0.52, rely=0.05, relwidth=0.45, relheight=0.8)
+    button = tk.Button(top, text="历史记录")
+
+    # 写入模块
+    path = os.getcwd()
+    xl = xlwt.Workbook(encoding='utf-8')
+    sheet = xl.add_sheet('chat_record', cell_overwrite_ok=True)
+    path = path + '\\' + 'dataB.xls'
+    xl.save(path)  # 先再当前路径下创建一个data.xls
+    wb = xlrd.open_workbook('dataB.xls')
+    ws = wb.sheet_by_index(0)
+    global rows_old
+    rows_old = ws.nrows
+    new_workbook = copy(wb)
+    new_worksheet = new_workbook.get_sheet(0)
+
+    # /////////
+
+    # 历史记录按钮按下和抬起///////////////
+
+    def press(event):
+        global his_time_start
+        new_worksheet.write(rows_old + 1, 7, time.strftime('%H:%M:%S'))
+        his_time_start = time.time()
+        label.place_forget()
+
+    def release(event):
+        his_time_end = time.time()
+        new_worksheet.write(rows_old + 1, 8, his_time_start - his_time_end)
+        label.place(relx=0.52, rely=0.01, relwidth=0.45, relheight=0.8)
+
+    button.place(relx=0.68, rely=0.88, relwidth=0.15, relheight=0.08)
+    button.bind("<ButtonPress>", press)
+    button.bind("<ButtonRelease>", release)
+
+    # /////////////////////////////////////
+
+    # 聊天框学习伙伴的内容框
+
+    partner_box = tk.Text(top, show=None, font=('Arial', 12), relief='sunken', state='normal')
+    partner_box.place(relx=0, rely=0.3, relwidth=0.5, relheight=0.38)  # 窗口的相关位置的设置
+
+    # ////////////////////
+
+    # 设置自己和他人的姓名颜色分别为绿色和红色
+    a = "end"
+    history_msg.tag_add('tag_self', a)
+    history_msg.tag_config('tag_self', foreground='green')  # 如果是自己的信息就是绿标
+    history_msg.tag_add('tag_partner', a)
+    history_msg.tag_config('tag_partner', foreground='red')  # 如果是朋友的信息就是红标
+
+    # ////////////////////////////////
+
+    # 输入框enter键输入
+    def enter(event):
+        write()
+        return 'break'
+        # 把输入框，绑定enter 按enter以后不会出现换行操作
+
+    def vanish(event):
+        msg = partner_box.get(1.0, "end")
+        end_time = time.time()
+        if len(msg) != 1:
+            read_time = end_time - start_time
+            new_worksheet.write(rows_old + 1, 3, time.strftime('%H:%M:%S'))
+            new_worksheet.write(rows_old + 1, 4, read_time)
+            new_worksheet.write(rows_old + 1, 5, char_len / read_time)
+            partner_box.delete(1.0, "end")  # 如果你开始输入，那么中间的信息框的信息就会消失
+
+    msg_in_box.bind('<Key>', vanish)  # 按任意键，朋友信息框消失
+    msg_in_box.bind('<Return>', enter)  # 绑定enter发送消息
+
+    # /////////////////
+
+    def receive():
+        while True:
+            try:
+                message = client.recv(1024).decode('utf-8')  # 接收消息并解码
+                if message == 'NICK':  # 如果是初始信息直接pass
+                    pass
+                if message[0:len(nickname)] == nickname:  # 看接受的信息开头是不是自己的名字
+                    msg_receive = time.strftime('%H:%M:%S') + message  # 信息加上时间戳
+                    name = msg_receive.split()[0]  # 接受的信息有一个换行，把信息和名字切成两半，前一半命名为name
+                    global rows_old  # 行数作为全局变量
+                    new_worksheet.write(rows_old + 1, 0, name[0:8])  # 把时间和名字写入excel
+                    new_worksheet.write(rows_old + 1, 1, name[8:])  # 名字
+                    new_worksheet.write(rows_old + 1, 2, msg_receive[len(name) + 1:])
+                    rows_old = rows_old + 1
+                    history_msg.insert(a, name + "\n", 'tag_self')  # 自己的信息加上绿标
+                    history_msg.insert("end", msg_receive[len(name) + 1:] + "\n")  # 将名字截开的后半部加到历史信息里
+                    history_msg.see("end")  # 历史消息自动滚动到最下
+                    new_workbook.save('dataB.xls')
+                else:
+                    global start_time
+                    msg_receive = str(time.strftime('%H:%M:%S') + message)  # 如果不是自己的就插入中间的聊天框
+                    name = msg_receive.split()[0]  # 同样分割两半
+                    new_worksheet.write(rows_old + 1, 0, name[0:8])  # 把时间和名字写入excel
+                    new_worksheet.write(rows_old + 1, 1, name[8:])  # 名字
+                    new_worksheet.write(rows_old + 1, 2, msg_receive[len(name) + 1:])
+                    rows_old = rows_old + 1
+                    global char_len
+                    partner_box.insert("end", msg_receive[len(name) + 1:] + "\n")
+                    char_len = len(msg_receive[len(name) + 1:])
+                    start_time = time.time()
+                    history_msg.insert(a, name + "\n", 'tag_partner')  # 朋友的信息加红头
+                    history_msg.insert(a, msg_receive[len(name) + 1:] + "\n")  # 后半段的消息加入历史聊天框
+                    history_msg.see("end")  # 历史消息自动滚动到最下
+                    new_workbook.save('dataB.xls')
+            except:
+                new_workbook.save('dataB.xls')
+                print('error occurred')
+                client.close()
+                break
+
+    def write():
+        msg = msg_in_box.get()  # 获取输入文本框的内容
+        msg_in_box.delete(0, "end")  # 输入文本框后把文本框内容删除
+
+        message = f'{nickname}:\n{msg}'  # 发送消息给服务器
+        client.send(message.encode('utf-8'))  # 将消息进行编码
+
+    receive_thread = threading.Thread(target=receive)
+    receive_thread.start()  # 创建接受消息的线程并启动这线程
+
+    write_thread = threading.Thread(target=write)
+    write_thread.start()  # 创建发送消息的线程并启动这线程
+    top.mainloop()  # 启动gui并不断刷新
+
+
+b.bind("<ButtonRelease>", release)
+window.mainloop()  # 192.168.194.5
